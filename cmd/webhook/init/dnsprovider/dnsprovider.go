@@ -6,19 +6,19 @@ import (
 	"strings"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/kashalls/external-dns-provider-unifi/cmd/webhook/init/configuration"
-	"github.com/kashalls/external-dns-provider-unifi/internal/unifi"
+	"github.com/crutonjohn/external-dns-provider-opnsense/cmd/webhook/init/configuration"
+	"github.com/crutonjohn/external-dns-provider-opnsense/internal/opnsense-unbound"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/provider"
 
 	log "github.com/sirupsen/logrus"
 )
 
-type UnifiProviderFactory func(baseProvider *provider.BaseProvider, unifiConfig *unifi.Config) provider.Provider
+type OpnsenseProviderFactory func(baseProvider *provider.BaseProvider, opnsenseConfig *opnsense.Config) provider.Provider
 
 func Init(config configuration.Config) (provider.Provider, error) {
 	var domainFilter endpoint.DomainFilter
-	createMsg := "creating unifi provider with "
+	createMsg := "creating opnsense provider with "
 
 	if config.RegexDomainFilter != "" {
 		createMsg += fmt.Sprintf("regexp domain filter: '%s', ", config.RegexDomainFilter)
@@ -45,10 +45,10 @@ func Init(config configuration.Config) (provider.Provider, error) {
 	}
 	log.Info(createMsg)
 
-	unifiConfig := unifi.Config{}
-	if err := env.Parse(&unifiConfig); err != nil {
-		return nil, fmt.Errorf("reading unifi configuration failed: %v", err)
+	opnsenseConfig := opnsense.Config{}
+	if err := env.Parse(&opnsenseConfig); err != nil {
+		return nil, fmt.Errorf("reading opnsense configuration failed: %v", err)
 	}
 
-	return unifi.NewUnifiProvider(domainFilter, &unifiConfig)
+	return opnsense.NewOpnsenseProvider(domainFilter, &opnsenseConfig)
 }
