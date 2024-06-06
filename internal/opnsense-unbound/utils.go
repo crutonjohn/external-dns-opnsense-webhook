@@ -1,4 +1,4 @@
-package unifi
+package opnsense
 
 import "strings"
 
@@ -11,4 +11,13 @@ func FormatUrl(path string, params ...string) string {
 		}
 	}
 	return strings.Join(segments, "")
+}
+
+// UnboundFQDNSplitter splits a DNSName into two parts,
+// [0] Being the top level hostname
+// [1] Being the subdomain/domain
+func UnboundFQDNSplitter(hostname string) []string {
+	unboundSplittedHost := strings.SplitN(hostname, ".", 2)
+
+	return unboundSplittedHost
 }

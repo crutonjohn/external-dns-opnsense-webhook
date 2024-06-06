@@ -1,4 +1,4 @@
-package unifi
+package opnsense
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"sigs.k8s.io/external-dns/provider"
 )
 
-// Provider type for interfacing with UniFi
+// Provider type for interfacing with Opnsense
 type Provider struct {
 	provider.BaseProvider
 
@@ -17,12 +17,12 @@ type Provider struct {
 	domainFilter endpoint.DomainFilter
 }
 
-// newUnifiProvider initializes a new DNSProvider.
-func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
-	c, err := newUnifiClient(config)
+// NewOpnsenseProvider initializes a new DNSProvider.
+func NewOpnsenseProvider(domainFilter endpoint.DomainFilter, config *Config) (provider.Provider, error) {
+	c, err := newOpnsenseClient(config)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create the unifi client: %w", err)
+		return nil, fmt.Errorf("failed to create the opnsense client: %w", err)
 	}
 
 	p := &Provider{
@@ -33,9 +33,9 @@ func NewUnifiProvider(domainFilter endpoint.DomainFilter, config *Config) (provi
 	return p, nil
 }
 
-// Records returns the list of records in the DNS provider.
+// Records returns the list of HostOverride records in Opnsense Unbound.
 func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
-	records, err := p.client.GetEndpoints()
+	records, err := p.client.GetHostOverrides()
 	if err != nil {
 		return nil, err
 	}
@@ -43,10 +43,10 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
 		ep := &endpoint.Endpoint{
-			DNSName:    record.Key,
-			RecordType: record.RecordType,
-			RecordTTL:  record.TTL,
-			Targets:    endpoint.NewTargets(record.Value),
+			DNSName:       record.Hostname + record.Domain,
+			RecordType:    record.Rr,
+			Targets:       endpoint.NewTargets(record.Server),
+			SetIdentifier: record.Description,
 		}
 
 		if !p.domainFilter.Match(ep.DNSName) {
@@ -62,16 +62,18 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 // ApplyChanges applies a given set of changes in the DNS provider.
 func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
 	for _, endpoint := range append(changes.UpdateOld, changes.Delete...) {
-		if err := p.client.DeleteEndpoint(endpoint); err != nil {
+		if err := p.client.DeleteHostOverride(endpoint); err != nil {
 			return err
 		}
 	}
 
 	for _, endpoint := range append(changes.Create, changes.UpdateNew...) {
-		if _, err := p.client.CreateEndpoint(endpoint); err != nil {
+		if _, err := p.client.CreateHostOverride(endpoint); err != nil {
 			return err
 		}
 	}
+
+	p.client.ReconfigureUnbound()
 
 	return nil
 }
