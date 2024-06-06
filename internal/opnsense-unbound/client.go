@@ -141,7 +141,8 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("POST: %+v", jsonBody)
+
+	log.Debugf("POST: %s", string(jsonBody))
 	resp, err := c.doRequest(
 		http.MethodPost,
 		FormatUrl(opnsenseUnboundSettingsPath, c.Config.Host, "addHostOverride"),
