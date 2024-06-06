@@ -116,7 +116,7 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 	defer resp.Body.Close()
 
 	var records unboundRecordsList
-	if err = json.NewDecoder(resp.Body).Decode(&records.Rows); err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
 		return nil, err
 	}
 
