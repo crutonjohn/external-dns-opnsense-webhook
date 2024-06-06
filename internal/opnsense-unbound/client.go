@@ -224,16 +224,10 @@ func (c *httpClient) ReconfigureUnbound() error {
 // setHeaders sets the headers for the HTTP request.
 func (c *httpClient) setHeaders(req *http.Request) {
 	// Add basic auth header
-	req.Header.Add("Authorization", "Basic "+basicAuth(c.Config.Key, c.Config.Secret))
+	opnsenseAuth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", c.Config.Key, c.Config.Secret)))
+	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", opnsenseAuth))
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json; charset=utf-8")
 	// Log the request URL
 	log.Debugf("Requesting %s", req.URL)
-
-}
-
-// basicAuth builds the auth header required by setHeaders
-func basicAuth(username, password string) string {
-	opnsenseAuth := username + ":" + password
-	return base64.StdEncoding.EncodeToString([]byte(opnsenseAuth))
 }
