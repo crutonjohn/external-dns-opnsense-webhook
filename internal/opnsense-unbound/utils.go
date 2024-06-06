@@ -21,3 +21,15 @@ func UnboundFQDNSplitter(hostname string) []string {
 
 	return unboundSplittedHost
 }
+
+func UnboundFQDNCombiner(hostname string, domain string) string {
+	unboundCombinededHost := hostname + domain
+
+	return unboundCombinededHost
+}
+
+func UnboundTypePrune(unboundType string) string {
+	unboundUncrufted := strings.SplitN(unboundType, " ", 2)[0]
+
+	return unboundUncrufted
+}
