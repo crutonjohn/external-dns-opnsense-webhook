@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 	"sigs.k8s.io/external-dns/provider"
@@ -35,6 +36,8 @@ func NewOpnsenseProvider(domainFilter endpoint.DomainFilter, config *Config) (pr
 
 // Records returns the list of HostOverride records in Opnsense Unbound.
 func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
+	log.Debugf("retrieving records from opnsense")
+
 	records, err := p.client.GetHostOverrides()
 	if err != nil {
 		return nil, err
@@ -43,10 +46,9 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
 		ep := &endpoint.Endpoint{
-			DNSName:       record.Hostname + record.Domain,
-			RecordType:    record.Rr,
-			Targets:       endpoint.NewTargets(record.Server),
-			SetIdentifier: record.Description,
+			DNSName:    UnboundFQDNCombiner(record.Hostname, record.Domain),
+			RecordType: UnboundTypePrune(record.Rr),
+			Targets:    endpoint.NewTargets(record.Server),
 		}
 
 		if !p.domainFilter.Match(ep.DNSName) {
