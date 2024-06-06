@@ -49,11 +49,23 @@ func newOpnsenseClient(config *Config) (*httpClient, error) {
 // login performs a basic call to validate credentials
 func (c *httpClient) login() error {
 
+	// TODO: Refactor and remove the multiple instances of this empty struct
+	// this is the fastest path forward for now, but would be nice to have a
+	// const or a better way to work around not needing application/json
+	// for requests that don't actually post json.
+	// Thankfully, the Opnsense API lets us post empty JSON for now.
+	var q struct{}
+
+	jsonBody, err := json.Marshal(q)
+	if err != nil {
+		return err
+	}
+
 	// Perform the test call
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "status"),
-		nil,
+		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
 		return err
@@ -104,10 +116,18 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 // GetHostOverrides retrieves the list of HostOverrides from the Opnsense Firewall's Unbound API.
 // These are equivalent to A or AAAA records
 func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
+
+	var q struct{}
+
+	jsonBody, err := json.Marshal(q)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(opnsenseUnboundSettingsPath, c.Config.Host, "searchHostOverride"),
-		nil,
+		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
 		return nil, err
@@ -167,10 +187,17 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
+	var q struct{}
+
+	jsonBody, err := json.Marshal(q)
+	if err != nil {
+		return err
+	}
+
 	if _, err = c.doRequest(
 		http.MethodPost,
 		FormatUrl(opnsenseUnboundSettingsPathDelete, c.Config.Host, lookup.Uuid),
-		nil,
+		bytes.NewReader(jsonBody),
 	); err != nil {
 		return err
 	}
@@ -199,11 +226,18 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSR
 // ReconfigureUnbound performs a reconfigure action in Unbound after editing records
 func (c *httpClient) ReconfigureUnbound() error {
 
+	var q struct{}
+
+	jsonBody, err := json.Marshal(q)
+	if err != nil {
+		return err
+	}
+
 	// Perform the test call
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "reconfigure"),
-		nil,
+		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
 		return err
