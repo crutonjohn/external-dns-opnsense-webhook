@@ -49,23 +49,11 @@ func newOpnsenseClient(config *Config) (*httpClient, error) {
 // login performs a basic call to validate credentials
 func (c *httpClient) login() error {
 
-	// TODO: Refactor and remove the multiple instances of this empty struct
-	// this is the fastest path forward for now, but would be nice to have a
-	// const or a better way to work around not needing application/json
-	// for requests that don't actually post json.
-	// Thankfully, the Opnsense API lets us post empty JSON for now.
-	var q struct{}
-
-	jsonBody, err := json.Marshal(q)
-	if err != nil {
-		return err
-	}
-
-	// Perform the test call
+	// Perform the test call by getting service status
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "status"),
-		bytes.NewReader(jsonBody),
+		nil,
 	)
 	if err != nil {
 		return err
@@ -117,17 +105,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 // These are equivalent to A or AAAA records
 func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 
-	var q struct{}
-
-	jsonBody, err := json.Marshal(q)
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(opnsenseUnboundSettingsPath, c.Config.Host, "searchHostOverride"),
-		bytes.NewReader(jsonBody),
+		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -187,6 +168,7 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
+	// empty json is required for this POST to work
 	var q struct{}
 
 	jsonBody, err := json.Marshal(q)
@@ -226,6 +208,7 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSR
 // ReconfigureUnbound performs a reconfigure action in Unbound after editing records
 func (c *httpClient) ReconfigureUnbound() error {
 
+	// empty json is required for this POST to work
 	var q struct{}
 
 	jsonBody, err := json.Marshal(q)
@@ -233,9 +216,9 @@ func (c *httpClient) ReconfigureUnbound() error {
 		return err
 	}
 
-	// Perform the test call
+	// Perform the reconfigure
 	resp, err := c.doRequest(
-		http.MethodGet,
+		http.MethodPost,
 		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "reconfigure"),
 		bytes.NewReader(jsonBody),
 	)
@@ -261,7 +244,9 @@ func (c *httpClient) setHeaders(req *http.Request) {
 	opnsenseAuth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", c.Config.Key, c.Config.Secret)))
 	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", opnsenseAuth))
 	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	if req.Method != http.MethodGet {
+		req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	}
 	// Log the request URL
 	log.Debugf("Requesting %s", req.URL)
 }
