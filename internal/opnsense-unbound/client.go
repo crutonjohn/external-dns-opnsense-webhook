@@ -126,18 +126,19 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 }
 
 // CreateHostOverride creates a new DNS A or AAAA record in the Opnsense Firewall's Unbound API.
-func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
+func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*unboundAddHostOverride, error) {
 
 	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
 
-	jsonBody, err := json.Marshal(DNSRecord{
-		Enabled:     "1",
-		Rr:          endpoint.RecordType,
-		Server:      endpoint.Targets[0],
-		Hostname:    SplittedHost[0],
-		Domain:      SplittedHost[1],
-		Description: endpoint.SetIdentifier,
-	})
+	jsonBody, err := json.Marshal(unboundAddHostOverride{
+		Host: DNSRecord{
+			Enabled:     "1",
+			Rr:          endpoint.RecordType,
+			Server:      endpoint.Targets[0],
+			Hostname:    SplittedHost[0],
+			Domain:      SplittedHost[1],
+			Description: endpoint.SetIdentifier,
+		}})
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,11 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 	}
 	defer resp.Body.Close()
 
-	var record DNSRecord
+	// TODO: Better error handling if API returns:
+	// {"result":"failed"}
+	//if resp.Body != nil && resp.Body
+
+	var record unboundAddHostOverride
 	if err = json.NewDecoder(resp.Body).Decode(&record); err != nil {
 		return nil, err
 	}
