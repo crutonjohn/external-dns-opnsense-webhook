@@ -128,16 +128,19 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 // CreateHostOverride creates a new DNS A or AAAA record in the Opnsense Firewall's Unbound API.
 func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*unboundAddHostOverride, error) {
 
+	if endpoint.RecordType == "CNAME" {
+		return nil, fmt.Errorf("record type not supported: %s", endpoint.RecordType)
+	}
+
 	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
 
 	jsonBody, err := json.Marshal(unboundAddHostOverride{
 		Host: DNSRecord{
-			Enabled:     "1",
-			Rr:          endpoint.RecordType,
-			Server:      endpoint.Targets[0],
-			Hostname:    SplittedHost[0],
-			Domain:      SplittedHost[1],
-			Description: endpoint.SetIdentifier,
+			Enabled:  "1",
+			Rr:       endpoint.RecordType,
+			Server:   endpoint.Targets[0],
+			Hostname: SplittedHost[0],
+			Domain:   SplittedHost[1],
 		}})
 	if err != nil {
 		return nil, err
@@ -184,7 +187,7 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 
 	if _, err = c.doRequest(
 		http.MethodPost,
-		FormatUrl(opnsenseUnboundSettingsPathDelete, c.Config.Host, lookup.Uuid),
+		FormatUrl(opnsenseUnboundSettingsPathDelete, c.Config.Host, *lookup),
 		bytes.NewReader(jsonBody),
 	); err != nil {
 		return err
@@ -194,7 +197,7 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 }
 
 // lookupHostOverrideIdentifier finds a HostOverride in the Opnsense Firewall's Unbound API.
-func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSRecord, error) {
+func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*string, error) {
 	records, err := c.GetHostOverrides()
 	if err != nil {
 		return nil, err
@@ -204,7 +207,7 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSR
 
 	for _, r := range records {
 		if r.Hostname == SplittedHost[0] && r.Domain == SplittedHost[1] && r.Rr == recordType {
-			return &r, nil
+			return &r.Uuid, nil
 		}
 	}
 
