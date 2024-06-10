@@ -128,16 +128,15 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 // CreateHostOverride creates a new DNS A or AAAA record in the Opnsense Firewall's Unbound API.
 func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*unboundAddHostOverride, error) {
 
+	log.Debugf("Try pulling pre-existing Unbound %s record: %s", endpoint.RecordType, endpoint.DNSName)
 	existingUuid, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
 		return nil, err
 	}
 
 	if existingUuid != nil {
-		if len(*existingUuid) > 0 {
-			log.Debugf("Skipping %s record exists: %s", endpoint.DNSName, *existingUuid)
-			return nil, err
-		}
+		log.Debugf("Found existing %s record for %s : %s", endpoint.RecordType, endpoint.DNSName, *existingUuid)
+		return nil, err
 	}
 
 	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
