@@ -134,11 +134,10 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*unboundAd
 		return nil, err
 	}
 
-	log.Debugf("Found uuid: %s", *existingUuid)
-
 	if existingUuid != nil {
+		log.Debugf("Found uuid: %s", *existingUuid)
 		log.Debugf("Found existing %s record for %s : %s", endpoint.RecordType, endpoint.DNSName, *existingUuid)
-		return nil, err
+		return nil, fmt.Errorf("record already exists with uuid: %s", *existingUuid)
 	}
 
 	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
@@ -220,7 +219,7 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*stri
 		}
 	}
 
-	return nil, err
+	return nil, nil
 }
 
 // ReconfigureUnbound performs a reconfigure action in Unbound after editing records
