@@ -133,9 +133,11 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*unboundAd
 		return nil, err
 	}
 
-	if len(*existingUuid) > 0 {
-		log.Debugf("Skipping %s record exists: %s", endpoint.DNSName, *existingUuid)
-		return nil, err
+	if existingUuid != nil {
+		if len(*existingUuid) > 0 {
+			log.Debugf("Skipping %s record exists: %s", endpoint.DNSName, *existingUuid)
+			return nil, err
+		}
 	}
 
 	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
