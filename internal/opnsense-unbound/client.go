@@ -134,6 +134,8 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*unboundAd
 		return nil, err
 	}
 
+	log.Debugf("Found uuid: %s", *existingUuid)
+
 	if existingUuid != nil {
 		log.Debugf("Found existing %s record for %s : %s", endpoint.RecordType, endpoint.DNSName, *existingUuid)
 		return nil, err
