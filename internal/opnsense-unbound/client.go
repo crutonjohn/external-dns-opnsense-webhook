@@ -215,6 +215,7 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*stri
 
 	for _, r := range records {
 		if r.Hostname == SplittedHost[0] && r.Domain == SplittedHost[1] && r.Rr == recordType {
+			log.Debugf("UUID Match Found: %s", r.Uuid)
 			return &r.Uuid, nil
 		}
 	}
