@@ -58,6 +58,8 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 		endpoints = append(endpoints, ep)
 	}
 
+	log.Debugf("records retrieved: %+v", endpoints)
+
 	return endpoints, nil
 }
 
