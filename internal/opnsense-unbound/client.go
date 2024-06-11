@@ -210,7 +210,7 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*stri
 	if err != nil {
 		return nil, err
 	}
-
+	log.Debug("Splitting FQDN")
 	SplittedHost := UnboundFQDNSplitter(key)
 
 	for _, r := range records {
@@ -219,7 +219,7 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*stri
 			return &r.Uuid, nil
 		}
 	}
-
+	log.Debugf("No matching record found for Host=%s, Domain=%s, Type=%s", SplittedHost[0], SplittedHost[1], recordType)
 	return nil, nil
 }
 
