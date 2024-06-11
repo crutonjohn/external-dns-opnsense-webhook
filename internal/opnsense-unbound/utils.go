@@ -33,3 +33,14 @@ func UnboundTypePrune(unboundType string) string {
 
 	return unboundUncrufted
 }
+
+func UnboundTypeEmbellisher(unboundType string) string {
+	if unboundType == "A" {
+		return unboundType + " (IPv4 Address)"
+	}
+	if unboundType == "AAAA" {
+		return unboundType + " (IPv6 Address)"
+	}
+
+	return unboundType
+}
