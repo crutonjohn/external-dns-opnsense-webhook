@@ -137,7 +137,7 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 	if lookup != nil {
 		log.Debugf("Found uuid: %s", lookup.Uuid)
 		log.Debugf("Found existing %s record for %s : %s", endpoint.RecordType, endpoint.DNSName, lookup.Uuid)
-		return lookup, fmt.Errorf("record already exists with uuid: %s", lookup.Uuid)
+		return lookup, nil
 	}
 
 	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
