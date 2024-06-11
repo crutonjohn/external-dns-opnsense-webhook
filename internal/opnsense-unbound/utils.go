@@ -23,7 +23,7 @@ func UnboundFQDNSplitter(hostname string) []string {
 }
 
 func UnboundFQDNCombiner(hostname string, domain string) string {
-	unboundCombinededHost := hostname + domain
+	unboundCombinededHost := hostname + "." + domain
 
 	return unboundCombinededHost
 }
