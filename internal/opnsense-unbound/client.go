@@ -126,18 +126,18 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 }
 
 // CreateHostOverride creates a new DNS A or AAAA record in the Opnsense Firewall's Unbound API.
-func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*unboundAddHostOverride, error) {
+func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 
 	log.Debugf("Try pulling pre-existing Unbound %s record: %s", endpoint.RecordType, endpoint.DNSName)
-	existingUuid, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType)
+	lookup, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
 		return nil, err
 	}
 
-	if existingUuid != nil {
-		log.Debugf("Found uuid: %s", *existingUuid)
-		log.Debugf("Found existing %s record for %s : %s", endpoint.RecordType, endpoint.DNSName, *existingUuid)
-		return nil, fmt.Errorf("record already exists with uuid: %s", *existingUuid)
+	if lookup != nil {
+		log.Debugf("Found uuid: %s", lookup.Uuid)
+		log.Debugf("Found existing %s record for %s : %s", endpoint.RecordType, endpoint.DNSName, lookup.Uuid)
+		return lookup, fmt.Errorf("record already exists with uuid: %s", lookup.Uuid)
 	}
 
 	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
@@ -175,7 +175,7 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*unboundAd
 	}
 	log.Debugf("created record: %+v", record)
 
-	return &record, nil
+	return nil, nil
 }
 
 // DeleteHostOverride deletes a DNS record from the Opnsense Firewall's Unbound API.
@@ -195,7 +195,7 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 
 	if _, err = c.doRequest(
 		http.MethodPost,
-		FormatUrl(opnsenseUnboundSettingsPathDelete, c.Config.Host, *lookup),
+		FormatUrl(opnsenseUnboundSettingsPathDelete, c.Config.Host, lookup.Uuid),
 		bytes.NewReader(jsonBody),
 	); err != nil {
 		return err
@@ -205,7 +205,7 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 }
 
 // lookupHostOverrideIdentifier finds a HostOverride in the Opnsense Firewall's Unbound API.
-func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*string, error) {
+func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSRecord, error) {
 	records, err := c.GetHostOverrides()
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*stri
 		log.Debugf("Checking record: Host=%s, Domain=%s, Type=%s, UUID=%s", r.Hostname, r.Domain, UnboundTypeEmbellisher(r.Rr), r.Uuid)
 		if r.Hostname == SplittedHost[0] && r.Domain == SplittedHost[1] && UnboundTypeEmbellisher(r.Rr) == UnboundTypeEmbellisher(recordType) {
 			log.Debugf("UUID Match Found: %s", r.Uuid)
-			return &r.Uuid, nil
+			return &r, nil
 		}
 	}
 	log.Debugf("No matching record found for Host=%s, Domain=%s, Type=%s", SplittedHost[0], SplittedHost[1], UnboundTypeEmbellisher(recordType))
