@@ -23,7 +23,7 @@ func NewOpnsenseProvider(domainFilter endpoint.DomainFilter, config *Config) (pr
 	c, err := newOpnsenseClient(config)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create the opnsense client: %w", err)
+		return nil, fmt.Errorf("provider: failed to create the opnsense client: %w", err)
 	}
 
 	p := &Provider{
@@ -36,7 +36,7 @@ func NewOpnsenseProvider(domainFilter endpoint.DomainFilter, config *Config) (pr
 
 // Records returns the list of HostOverride records in Opnsense Unbound.
 func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
-	log.Debugf("retrieving records from opnsense")
+	log.Debugf("records: retrieving records from opnsense")
 
 	records, err := p.client.GetHostOverrides()
 	if err != nil {
@@ -58,7 +58,7 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 		endpoints = append(endpoints, ep)
 	}
 
-	log.Debugf("records retrieved: %+v", endpoints)
+	log.Debugf("records: retrieved: %+v", endpoints)
 
 	return endpoints, nil
 }
