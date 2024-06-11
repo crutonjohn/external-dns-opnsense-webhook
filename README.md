@@ -83,14 +83,6 @@
     helm install external-dns-unifi external-dns/external-dns -f external-dns-unifi-values yaml --version 1.14.3 -n external-dns
     ```
 
-## ⭐ Stargazers
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=kashalls/external-dns-unifi-webhook&type=Date)](https://star-history.com/#kashalls/external-dns-unifi-webhook&Date)
-
-</div>
-
 ---
 
 ## 🤝 Gratitude and Thanks
