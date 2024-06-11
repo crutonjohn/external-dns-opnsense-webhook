@@ -7,6 +7,8 @@
 
 </div>
 
+This webhook graciously ~~stolen~~ inspired by [Kashall's Unifi Webhook](https://github.com/kashalls/external-dns-unifi-webhook).
+
 > [!WARNING]
 > This software is experimental and **NOT FIT FOR PRODUCTION USE!**
 
