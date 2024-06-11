@@ -36,10 +36,10 @@ func UnboundTypePrune(unboundType string) string {
 
 func UnboundTypeEmbellisher(unboundType string) string {
 	if unboundType == "A" {
-		return unboundType + " (IPv4 Address)"
+		return unboundType + " (IPv4 address)"
 	}
 	if unboundType == "AAAA" {
-		return unboundType + " (IPv6 Address)"
+		return unboundType + " (IPv6 address)"
 	}
 
 	return unboundType
