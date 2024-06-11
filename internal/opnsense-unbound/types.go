@@ -29,3 +29,8 @@ type unboundRecordsList struct {
 	Current  int         `json:"current"`
 	Rows     []DNSRecord `json:"Rows"`
 }
+
+// Specific format for POST against the Opnsense Unbound API
+type unboundAddHostOverride struct {
+	Host DNSRecord `json:"host"`
+}

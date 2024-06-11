@@ -49,23 +49,11 @@ func newOpnsenseClient(config *Config) (*httpClient, error) {
 // login performs a basic call to validate credentials
 func (c *httpClient) login() error {
 
-	// TODO: Refactor and remove the multiple instances of this empty struct
-	// this is the fastest path forward for now, but would be nice to have a
-	// const or a better way to work around not needing application/json
-	// for requests that don't actually post json.
-	// Thankfully, the Opnsense API lets us post empty JSON for now.
-	var q struct{}
-
-	jsonBody, err := json.Marshal(q)
-	if err != nil {
-		return err
-	}
-
-	// Perform the test call
+	// Perform the test call by getting service status
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "status"),
-		bytes.NewReader(jsonBody),
+		nil,
 	)
 	if err != nil {
 		return err
@@ -76,8 +64,8 @@ func (c *httpClient) login() error {
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		log.Errorf("login failed: %s, response: %s", resp.Status, string(respBody))
-		return fmt.Errorf("login failed: %s", resp.Status)
+		log.Errorf("login: failed: %s, response: %s", resp.Status, string(respBody))
+		return fmt.Errorf("login: failed: %s", resp.Status)
 	}
 
 	return nil
@@ -85,7 +73,7 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the Opnsense firewall.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	log.Debugf("making %s request to %s", method, path)
+	log.Debugf("doRequest: making %s request to %s", method, path)
 
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
@@ -99,15 +87,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		return nil, err
 	}
 
-	log.Debugf("response code from %s request to %s: %d", method, path, resp.StatusCode)
-
-	// If the status code is 401, re-login and retry the request
-	if resp.StatusCode == http.StatusUnauthorized {
-		log.Debugf("Received 401 Unauthorized, are your credentials correct?")
-	}
+	log.Debugf("doRequest: response code from %s request to %s: %d", method, path, resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s request to %s was not successful: %d", method, path, resp.StatusCode)
+		return nil, fmt.Errorf("doRequest: %s request to %s was not successful: %d", method, path, resp.StatusCode)
 	}
 
 	return resp, nil
@@ -117,17 +100,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 // These are equivalent to A or AAAA records
 func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 
-	var q struct{}
-
-	jsonBody, err := json.Marshal(q)
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := c.doRequest(
 		http.MethodGet,
 		FormatUrl(opnsenseUnboundSettingsPath, c.Config.Host, "searchHostOverride"),
-		bytes.NewReader(jsonBody),
+		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -135,11 +111,11 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 	defer resp.Body.Close()
 
 	var records unboundRecordsList
-	if err = json.NewDecoder(resp.Body).Decode(&records.Rows); err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
 		return nil, err
 	}
 
-	log.Debugf("retrieved records: %+v", records.Rows)
+	log.Debugf("gethost: retrieved records: %+v", records.Rows)
 
 	return records.Rows, nil
 }
@@ -147,20 +123,33 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 // CreateHostOverride creates a new DNS A or AAAA record in the Opnsense Firewall's Unbound API.
 func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 
-	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
-
-	jsonBody, err := json.Marshal(DNSRecord{
-		Enabled:     "1",
-		Rr:          endpoint.RecordType,
-		Server:      endpoint.Targets[0],
-		Hostname:    SplittedHost[0],
-		Domain:      SplittedHost[1],
-		Description: endpoint.SetIdentifier,
-	})
+	log.Debugf("create: Try pulling pre-existing Unbound %s record: %s", endpoint.RecordType, endpoint.DNSName)
+	lookup, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("POST: %+v", jsonBody)
+
+	if lookup != nil {
+		log.Debugf("create: Found uuid: %s", lookup.Uuid)
+		log.Debugf("create: Found existing %s record for %s : %s", endpoint.RecordType, endpoint.DNSName, lookup.Uuid)
+		return lookup, nil
+	}
+
+	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
+
+	jsonBody, err := json.Marshal(unboundAddHostOverride{
+		Host: DNSRecord{
+			Enabled:  "1",
+			Rr:       endpoint.RecordType,
+			Server:   endpoint.Targets[0],
+			Hostname: SplittedHost[0],
+			Domain:   SplittedHost[1],
+		}})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debugf("create: POST: %s", string(jsonBody))
 	resp, err := c.doRequest(
 		http.MethodPost,
 		FormatUrl(opnsenseUnboundSettingsPath, c.Config.Host, "addHostOverride"),
@@ -171,22 +160,30 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 	}
 	defer resp.Body.Close()
 
-	var record DNSRecord
+	// TODO: Better error handling if API returns:
+	// {"result":"failed"}
+	//if resp.Body != nil && resp.Body
+
+	var record unboundAddHostOverride
 	if err = json.NewDecoder(resp.Body).Decode(&record); err != nil {
 		return nil, err
 	}
-	log.Debugf("created record: %+v", record)
+	log.Debugf("create: created record: %+v", record)
 
-	return &record, nil
+	return nil, nil
 }
 
 // DeleteHostOverride deletes a DNS record from the Opnsense Firewall's Unbound API.
 func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
+	log.Debugf("delete: Deleting record %+v", endpoint)
 	lookup, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
 		return err
 	}
 
+	log.Debugf("delete: Found match %s", lookup.Uuid)
+
+	// empty json is required for this POST to work
 	var q struct{}
 
 	jsonBody, err := json.Marshal(q)
@@ -194,6 +191,7 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 		return err
 	}
 
+	log.Debugf("delete: Sending POST %s", lookup.Uuid)
 	if _, err = c.doRequest(
 		http.MethodPost,
 		FormatUrl(opnsenseUnboundSettingsPathDelete, c.Config.Host, lookup.Uuid),
@@ -211,21 +209,24 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSR
 	if err != nil {
 		return nil, err
 	}
-
+	log.Debug("lookup: Splitting FQDN")
 	SplittedHost := UnboundFQDNSplitter(key)
 
 	for _, r := range records {
-		if r.Hostname == SplittedHost[0] && r.Domain == SplittedHost[1] && r.Rr == recordType {
+		log.Debugf("lookup: Checking record: Host=%s, Domain=%s, Type=%s, UUID=%s", r.Hostname, r.Domain, UnboundTypeEmbellisher(r.Rr), r.Uuid)
+		if r.Hostname == SplittedHost[0] && r.Domain == SplittedHost[1] && UnboundTypeEmbellisher(r.Rr) == UnboundTypeEmbellisher(recordType) {
+			log.Debugf("lookup: UUID Match Found: %s", r.Uuid)
 			return &r, nil
 		}
 	}
-
-	return nil, err
+	log.Debugf("lookup: No matching record found for Host=%s, Domain=%s, Type=%s", SplittedHost[0], SplittedHost[1], UnboundTypeEmbellisher(recordType))
+	return nil, nil
 }
 
 // ReconfigureUnbound performs a reconfigure action in Unbound after editing records
 func (c *httpClient) ReconfigureUnbound() error {
 
+	// empty json is required for this POST to work
 	var q struct{}
 
 	jsonBody, err := json.Marshal(q)
@@ -233,9 +234,9 @@ func (c *httpClient) ReconfigureUnbound() error {
 		return err
 	}
 
-	// Perform the test call
+	// Perform the reconfigure
 	resp, err := c.doRequest(
-		http.MethodGet,
+		http.MethodPost,
 		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "reconfigure"),
 		bytes.NewReader(jsonBody),
 	)
@@ -248,8 +249,8 @@ func (c *httpClient) ReconfigureUnbound() error {
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		log.Errorf("login failed: %s, response: %s", resp.Status, string(respBody))
-		return fmt.Errorf("reconfigure unbound failed: %s", resp.Status)
+		log.Errorf("reconfigure: login failed: %s, response: %s", resp.Status, string(respBody))
+		return fmt.Errorf("reconfigure: unbound failed: %s", resp.Status)
 	}
 
 	return nil
@@ -261,7 +262,9 @@ func (c *httpClient) setHeaders(req *http.Request) {
 	opnsenseAuth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", c.Config.Key, c.Config.Secret)))
 	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", opnsenseAuth))
 	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	if req.Method != http.MethodGet {
+		req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	}
 	// Log the request URL
-	log.Debugf("Requesting %s", req.URL)
+	log.Debugf("headers: Requesting %s", req.URL)
 }

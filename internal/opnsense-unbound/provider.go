@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/plan"
 	"sigs.k8s.io/external-dns/provider"
@@ -22,7 +23,7 @@ func NewOpnsenseProvider(domainFilter endpoint.DomainFilter, config *Config) (pr
 	c, err := newOpnsenseClient(config)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create the opnsense client: %w", err)
+		return nil, fmt.Errorf("provider: failed to create the opnsense client: %w", err)
 	}
 
 	p := &Provider{
@@ -35,6 +36,8 @@ func NewOpnsenseProvider(domainFilter endpoint.DomainFilter, config *Config) (pr
 
 // Records returns the list of HostOverride records in Opnsense Unbound.
 func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
+	log.Debugf("records: retrieving records from opnsense")
+
 	records, err := p.client.GetHostOverrides()
 	if err != nil {
 		return nil, err
@@ -43,10 +46,9 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
 		ep := &endpoint.Endpoint{
-			DNSName:       record.Hostname + record.Domain,
-			RecordType:    record.Rr,
-			Targets:       endpoint.NewTargets(record.Server),
-			SetIdentifier: record.Description,
+			DNSName:    UnboundFQDNCombiner(record.Hostname, record.Domain),
+			RecordType: UnboundTypePrune(record.Rr),
+			Targets:    endpoint.NewTargets(record.Server),
 		}
 
 		if !p.domainFilter.Match(ep.DNSName) {
@@ -55,6 +57,8 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 
 		endpoints = append(endpoints, ep)
 	}
+
+	log.Debugf("records: retrieved: %+v", endpoints)
 
 	return endpoints, nil
 }
