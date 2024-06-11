@@ -214,7 +214,8 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*stri
 	SplittedHost := UnboundFQDNSplitter(key)
 
 	for _, r := range records {
-		if r.Hostname == SplittedHost[0] && r.Domain == SplittedHost[1] && r.Rr == recordType {
+		log.Debugf("Checking record: Host=%s, Domain=%s, Type=%s, UUID=%s", r.Hostname, r.Domain, r.Rr, r.Uuid)
+		if r.Hostname == SplittedHost[0] && r.Domain == SplittedHost[1] && UnboundTypeEmbellisher(r.Rr) == recordType {
 			log.Debugf("UUID Match Found: %s", r.Uuid)
 			return &r.Uuid, nil
 		}
