@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -20,17 +22,16 @@ const emptyJSONObject = "{}"
 type httpClient struct {
 	*Config
 	*http.Client
+	baseURL *url.URL
 }
-
-const (
-	opnsenseUnboundServicePath  = "%s/api/unbound/service/%s"
-	opnsenseUnboundSettingsPath = "%s/api/unbound/settings/%s"
-	// Hacky, but nice to have the delete as an explicit constant since it's destructive
-	opnsenseUnboundSettingsPathDelete = "%s/api/unbound/settings/delHostOverride/%s"
-)
 
 // newOpnsenseClient creates a new DNS provider client.
 func newOpnsenseClient(config *Config) (*httpClient, error) {
+	u, err := url.Parse(config.Host)
+	if err != nil {
+		return nil, fmt.Errorf("parse url: %w", err)
+	}
+	u.Path = path.Join(u.Path, "api/unbound")
 
 	// Create the HTTP client
 	client := &httpClient{
@@ -40,6 +41,7 @@ func newOpnsenseClient(config *Config) (*httpClient, error) {
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipTLSVerify},
 			},
 		},
+		baseURL: u,
 	}
 
 	if err := client.login(); err != nil {
@@ -51,11 +53,10 @@ func newOpnsenseClient(config *Config) (*httpClient, error) {
 
 // login performs a basic call to validate credentials
 func (c *httpClient) login() error {
-
 	// Perform the test call by getting service status
 	resp, err := c.doRequest(
 		http.MethodGet,
-		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "status"),
+		"service/status",
 		nil,
 	)
 	if err != nil {
@@ -76,9 +77,13 @@ func (c *httpClient) login() error {
 
 // doRequest makes an HTTP request to the Opnsense firewall.
 func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Response, error) {
-	log.Debugf("doRequest: making %s request to %s", method, path)
+	u := c.baseURL.ResolveReference(&url.URL{
+		Path: path,
+	})
 
-	req, err := http.NewRequest(method, path, body)
+	log.Debugf("doRequest: making %s request to %s", method, u)
+
+	req, err := http.NewRequest(method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -90,10 +95,10 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		return nil, err
 	}
 
-	log.Debugf("doRequest: response code from %s request to %s: %d", method, path, resp.StatusCode)
+	log.Debugf("doRequest: response code from %s request to %s: %d", method, u, resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("doRequest: %s request to %s was not successful: %d", method, path, resp.StatusCode)
+		return nil, fmt.Errorf("doRequest: %s request to %s was not successful: %d", method, u, resp.StatusCode)
 	}
 
 	return resp, nil
@@ -102,10 +107,9 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 // GetHostOverrides retrieves the list of HostOverrides from the Opnsense Firewall's Unbound API.
 // These are equivalent to A or AAAA records
 func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
-
 	resp, err := c.doRequest(
 		http.MethodGet,
-		FormatUrl(opnsenseUnboundSettingsPath, c.Config.Host, "searchHostOverride"),
+		"settings/searchHostOverride",
 		nil,
 	)
 	if err != nil {
@@ -125,7 +129,6 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 
 // CreateHostOverride creates a new DNS A or AAAA record in the Opnsense Firewall's Unbound API.
 func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-
 	log.Debugf("create: Try pulling pre-existing Unbound %s record: %s", endpoint.RecordType, endpoint.DNSName)
 	lookup, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType)
 	if err != nil {
@@ -155,7 +158,7 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 	log.Debugf("create: POST: %s", string(jsonBody))
 	resp, err := c.doRequest(
 		http.MethodPost,
-		FormatUrl(opnsenseUnboundSettingsPath, c.Config.Host, "addHostOverride"),
+		"settings/addHostOverride",
 		bytes.NewReader(jsonBody),
 	)
 	if err != nil {
@@ -189,7 +192,7 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 	log.Debugf("delete: Sending POST %s", lookup.Uuid)
 	if _, err = c.doRequest(
 		http.MethodPost,
-		FormatUrl(opnsenseUnboundSettingsPathDelete, c.Config.Host, lookup.Uuid),
+		path.Join("settings/delHostOverride", lookup.Uuid),
 		strings.NewReader(emptyJSONObject),
 	); err != nil {
 		return err
@@ -223,7 +226,7 @@ func (c *httpClient) ReconfigureUnbound() error {
 	// Perform the reconfigure
 	resp, err := c.doRequest(
 		http.MethodPost,
-		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "reconfigure"),
+		"service/reconfigure",
 		strings.NewReader(emptyJSONObject),
 	)
 	if err != nil {
