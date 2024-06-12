@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/external-dns/endpoint"
 )
+
+const emptyJSONObject = "{}"
 
 // httpClient is the DNS provider client.
 type httpClient struct {
@@ -183,19 +186,11 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 
 	log.Debugf("delete: Found match %s", lookup.Uuid)
 
-	// empty json is required for this POST to work
-	var q struct{}
-
-	jsonBody, err := json.Marshal(q)
-	if err != nil {
-		return err
-	}
-
 	log.Debugf("delete: Sending POST %s", lookup.Uuid)
 	if _, err = c.doRequest(
 		http.MethodPost,
 		FormatUrl(opnsenseUnboundSettingsPathDelete, c.Config.Host, lookup.Uuid),
-		bytes.NewReader(jsonBody),
+		strings.NewReader(emptyJSONObject),
 	); err != nil {
 		return err
 	}
@@ -225,20 +220,11 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSR
 
 // ReconfigureUnbound performs a reconfigure action in Unbound after editing records
 func (c *httpClient) ReconfigureUnbound() error {
-
-	// empty json is required for this POST to work
-	var q struct{}
-
-	jsonBody, err := json.Marshal(q)
-	if err != nil {
-		return err
-	}
-
 	// Perform the reconfigure
 	resp, err := c.doRequest(
 		http.MethodPost,
 		FormatUrl(opnsenseUnboundServicePath, c.Config.Host, "reconfigure"),
-		bytes.NewReader(jsonBody),
+		strings.NewReader(emptyJSONObject),
 	)
 	if err != nil {
 		return err
