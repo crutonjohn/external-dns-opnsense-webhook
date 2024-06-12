@@ -141,15 +141,15 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 		return lookup, nil
 	}
 
-	SplittedHost := UnboundFQDNSplitter(endpoint.DNSName)
+	splitHost := SplitUnboundFQDN(endpoint.DNSName)
 
 	jsonBody, err := json.Marshal(unboundAddHostOverride{
 		Host: DNSRecord{
 			Enabled:  "1",
 			Rr:       endpoint.RecordType,
 			Server:   endpoint.Targets[0],
-			Hostname: SplittedHost[0],
-			Domain:   SplittedHost[1],
+			Hostname: splitHost[0],
+			Domain:   splitHost[1],
 		}})
 	if err != nil {
 		return nil, err
@@ -208,16 +208,16 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSR
 		return nil, err
 	}
 	log.Debug("lookup: Splitting FQDN")
-	SplittedHost := UnboundFQDNSplitter(key)
+	splitHost := SplitUnboundFQDN(key)
 
 	for _, r := range records {
-		log.Debugf("lookup: Checking record: Host=%s, Domain=%s, Type=%s, UUID=%s", r.Hostname, r.Domain, UnboundTypeEmbellisher(r.Rr), r.Uuid)
-		if r.Hostname == SplittedHost[0] && r.Domain == SplittedHost[1] && UnboundTypeEmbellisher(r.Rr) == UnboundTypeEmbellisher(recordType) {
+		log.Debugf("lookup: Checking record: Host=%s, Domain=%s, Type=%s, UUID=%s", r.Hostname, r.Domain, EmbellishUnboundType(r.Rr), r.Uuid)
+		if r.Hostname == splitHost[0] && r.Domain == splitHost[1] && EmbellishUnboundType(r.Rr) == EmbellishUnboundType(recordType) {
 			log.Debugf("lookup: UUID Match Found: %s", r.Uuid)
 			return &r, nil
 		}
 	}
-	log.Debugf("lookup: No matching record found for Host=%s, Domain=%s, Type=%s", SplittedHost[0], SplittedHost[1], UnboundTypeEmbellisher(recordType))
+	log.Debugf("lookup: No matching record found for Host=%s, Domain=%s, Type=%s", splitHost[0], splitHost[1], EmbellishUnboundType(recordType))
 	return nil, nil
 }
 

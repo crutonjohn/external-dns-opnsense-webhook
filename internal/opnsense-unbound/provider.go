@@ -46,8 +46,8 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 	var endpoints []*endpoint.Endpoint
 	for _, record := range records {
 		ep := &endpoint.Endpoint{
-			DNSName:    UnboundFQDNCombiner(record.Hostname, record.Domain),
-			RecordType: UnboundTypePrune(record.Rr),
+			DNSName:    JoinUnboundFQDN(record.Hostname, record.Domain),
+			RecordType: PruneUnboundType(record.Rr),
 			Targets:    endpoint.NewTargets(record.Server),
 		}
 
