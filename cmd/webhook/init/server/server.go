@@ -38,10 +38,12 @@ func Init(config configuration.Config, p *webhook.Webhook) (*http.Server, *http.
 	mainRouter.Post("/records", p.ApplyChanges)
 	mainRouter.Post("/adjustendpoints", p.AdjustEndpoints)
 
-	mainServer := createHTTPServer(fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort), mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
+	address := fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort)
+	mainServer := createHTTPServer(address, mainRouter, config.ServerReadTimeout, config.ServerWriteTimeout)
 	go func() {
 		log.Infof("starting server on addr: '%s' ", mainServer.Addr)
-		if err := mainServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		err := mainServer.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Errorf("can't serve on addr: '%s', error: %v", mainServer.Addr, err)
 		}
 	}()
@@ -71,13 +73,15 @@ func createHTTPServer(addr string, hand http.Handler, readTimeout, writeTimeout 
 	}
 }
 
-// ShutdownGracefully gracefully shutdown the http server
-func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
+func WaitForSignal() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-sigCh
-
 	log.Infof("shutting down servers due to received signal: %v", sig)
+}
+
+// ShutdownGracefully gracefully shutdown the http server
+func ShutdownGracefully(mainServer *http.Server, healthServer *http.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

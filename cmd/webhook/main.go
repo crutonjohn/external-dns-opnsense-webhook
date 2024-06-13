@@ -34,5 +34,6 @@ func main() {
 	}
 
 	main, health := server.Init(config, webhook.New(provider))
+	server.WaitForSignal()
 	server.ShutdownGracefully(main, health)
 }
