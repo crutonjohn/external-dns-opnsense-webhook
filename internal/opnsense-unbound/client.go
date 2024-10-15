@@ -95,6 +95,8 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		return nil, err
 	}
 
+	defer resp.Body.Close()
+
 	log.Debugf("doRequest: response code from %s request to %s: %d", method, u, resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
