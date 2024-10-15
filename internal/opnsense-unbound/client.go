@@ -63,7 +63,7 @@ func (c *httpClient) login() error {
 		return err
 	}
 
-	defer resp.Body.Close()
+	//defer resp.Body.Close()
 
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
@@ -101,6 +101,8 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 		return nil, fmt.Errorf("doRequest: %s request to %s was not successful: %d", method, u, resp.StatusCode)
 	}
 
+	defer resp.Body.Close()
+
 	return resp, nil
 }
 
@@ -115,7 +117,7 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	//defer resp.Body.Close()
 
 	var records unboundRecordsList
 	if err = json.NewDecoder(resp.Body).Decode(&records); err != nil {
@@ -164,7 +166,7 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	//defer resp.Body.Close()
 
 	// TODO: Better error handling if API returns:
 	// {"result":"failed"}
@@ -233,7 +235,7 @@ func (c *httpClient) ReconfigureUnbound() error {
 		return err
 	}
 
-	defer resp.Body.Close()
+	//defer resp.Body.Close()
 
 	// Check if the login was successful
 	if resp.StatusCode != http.StatusOK {
