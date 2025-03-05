@@ -2,7 +2,7 @@ module github.com/crutonjohn/external-dns-provider-opnsense
 
 go 1.22.2
 
-toolchain go1.22.3
+toolchain go1.24.1
 
 require (
 	github.com/caarlos0/env/v11 v11.0.1
