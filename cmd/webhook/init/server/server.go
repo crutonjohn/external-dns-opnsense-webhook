@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/crutonjohn/external-dns-provider-opnsense/cmd/webhook/init/configuration"
-	"github.com/crutonjohn/external-dns-provider-opnsense/pkg/webhook"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/cmd/webhook/init/configuration"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/pkg/webhook"
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 

@@ -3,16 +3,16 @@ package main
 import (
 	"fmt"
 
-	"github.com/crutonjohn/external-dns-provider-opnsense/cmd/webhook/init/configuration"
-	"github.com/crutonjohn/external-dns-provider-opnsense/cmd/webhook/init/dnsprovider"
-	"github.com/crutonjohn/external-dns-provider-opnsense/cmd/webhook/init/logging"
-	"github.com/crutonjohn/external-dns-provider-opnsense/cmd/webhook/init/server"
-	"github.com/crutonjohn/external-dns-provider-opnsense/pkg/webhook"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/cmd/webhook/init/configuration"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/cmd/webhook/init/dnsprovider"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/cmd/webhook/init/logging"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/cmd/webhook/init/server"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/pkg/webhook"
 	log "github.com/sirupsen/logrus"
 )
 
 const banner = `
-external-dns-provider-opnsense
+external-dns-opnsense-webhook
 version: %s (%s)
 
 `
