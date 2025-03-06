@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/crutonjohn/external-dns-provider-opnsense/cmd/webhook/init/configuration"
-	"github.com/crutonjohn/external-dns-provider-opnsense/internal/opnsense-unbound"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/cmd/webhook/init/configuration"
+	"github.com/crutonjohn/external-dns-opnsense-webhook/internal/opnsense-unbound"
 	"sigs.k8s.io/external-dns/endpoint"
 	"sigs.k8s.io/external-dns/provider"
 
