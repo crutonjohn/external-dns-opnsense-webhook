@@ -130,6 +130,22 @@ This effecively protects your record from ownership conflicts while still allowi
 
 ---
 
+## 👷 Building & Testing
+
+Build:
+
+```sh
+go build -ldflags "-s -w -X main.Version=test -X main.Gitsha=test" ./cmd/webhook
+```
+
+Run:
+
+```sh
+OPNSENSE_HOST=https://192.168.0.1 OPNSENSE_API_SECRET=<secret value> OPNSENSE_API_KEY=<key value> ./webhook
+```
+
+---
+
 ## 🤝 Gratitude and Thanks
 
 Thanks to all the people who donate their time to the [Home Operations](https://discord.gg/home-operations) Discord community.
