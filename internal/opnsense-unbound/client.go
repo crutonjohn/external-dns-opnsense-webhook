@@ -31,7 +31,13 @@ func newOpnsenseClient(config *Config) (*httpClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
 	}
-	u.Path = path.Join(u.Path, "api/unbound")
+
+	// Ensure the base path is correctly set
+	basePath, err := url.Parse("api/unbound/")
+	if err != nil {
+		return nil, fmt.Errorf("parse base path: %w", err)
+	}
+	u = u.ResolveReference(basePath)
 
 	// Create the HTTP client
 	client := &httpClient{
@@ -98,6 +104,7 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	log.Debugf("doRequest: response code from %s request to %s: %d", method, u, resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
 		return nil, fmt.Errorf("doRequest: %s request to %s was not successful: %d", method, u, resp.StatusCode)
 	}
 
