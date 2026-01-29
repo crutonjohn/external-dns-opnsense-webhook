@@ -18,7 +18,7 @@ This webhook graciously ~~stolen~~ inspired by [Kashall's Unifi Webhook](https:/
 
 As of this writing this webhook supports A, AAAA, and TXT records using Unbound's Host Overrides. A/AAAA/TXT records work because they effectively map 1:1 with Host Overrides.
 
-With significantly more effort, CNAMEs could be supported and mapped to Host Override Aliases, which may be implemented in the future.
+CNAME records are supported using Unbound's Host Override Aliases.
 
 > [!NOTE]
 > TXT record support requires OPNsense >= 25.7 or later versions with TXT record support in Unbound.
