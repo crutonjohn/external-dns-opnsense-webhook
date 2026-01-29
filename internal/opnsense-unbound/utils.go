@@ -30,6 +30,8 @@ func EmbellishUnboundType(unboundType string) string {
 		return unboundType + " (IPv6 address)"
 	case "TXT":
 		return unboundType + " (Text record)"
+	case "CNAME":
+		return unboundType + " (CNAME record)"
 	}
 	return unboundType
 }

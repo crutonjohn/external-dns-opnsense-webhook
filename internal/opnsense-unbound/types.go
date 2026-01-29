@@ -22,6 +22,17 @@ type DNSRecord struct {
 	TxtData     string `json:"txtdata,omitempty"`
 }
 
+// DNSAlias represents a DNS alias (CNAME) record in the Opnsense Unbound API.
+type DNSAlias struct {
+	Uuid        string `json:"uuid"`
+	Enabled     string `json:"enabled"`
+	Hostname    string `json:"hostname"`
+	Domain      string `json:"domain"`
+	Host        string `json:"host"` // Points to the host override UUID
+	Override    string `json:"%host"` // this is just used for debugging
+	Description string `json:"description"`
+}
+
 // unboundRecordsList is the main item returned from the Opnsense Unbound API
 // since it has some decorators we just throw this struct away
 type unboundRecordsList struct {
@@ -31,7 +42,20 @@ type unboundRecordsList struct {
 	Rows     []DNSRecord `json:"Rows"`
 }
 
+// unboundAliasesList is the main item returned from the Opnsense Unbound API for aliases
+type unboundAliasesList struct {
+	RowCount int        `json:"rowCount"`
+	Total    int        `json:"total"`
+	Current  int        `json:"current"`
+	Rows     []DNSAlias `json:"Rows"`
+}
+
 // Specific format for POST against the Opnsense Unbound API
 type unboundAddHostOverride struct {
 	Host DNSRecord `json:"host"`
+}
+
+// Specific format for POST against the Opnsense Unbound API for aliases
+type unboundAddHostAlias struct {
+	Alias DNSAlias `json:"alias"`
 }
