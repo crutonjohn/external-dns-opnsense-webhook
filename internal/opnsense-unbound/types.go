@@ -35,3 +35,9 @@ type unboundRecordsList struct {
 type unboundAddHostOverride struct {
 	Host DNSRecord `json:"host"`
 }
+
+// Response from addHostOverride and setHostOverride API calls
+type unboundHostOverrideResponse struct {
+	Result string `json:"result"`
+	UUID   string `json:"uuid"`
+}

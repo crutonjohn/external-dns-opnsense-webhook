@@ -91,6 +91,28 @@ func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) erro
 	return nil
 }
 
+// AdjustEndpoints splits any multi-target endpoint into individual single-target endpoints.
+// OPNsense Unbound host overrides store exactly one IP per entry, so endpoints with multiple
+// targets must be represented as separate records.
+func (p *Provider) AdjustEndpoints(eps []*endpoint.Endpoint) ([]*endpoint.Endpoint, error) {
+	var adjusted []*endpoint.Endpoint
+	for _, ep := range eps {
+		if len(ep.Targets) <= 1 {
+			adjusted = append(adjusted, ep)
+			continue
+		}
+		for _, target := range ep.Targets {
+			adjusted = append(adjusted, &endpoint.Endpoint{
+				DNSName:    ep.DNSName,
+				RecordType: ep.RecordType,
+				Targets:    endpoint.NewTargets(target),
+				RecordTTL:  ep.RecordTTL,
+			})
+		}
+	}
+	return adjusted, nil
+}
+
 // GetDomainFilter returns the domain filter for the provider.
 func (p *Provider) GetDomainFilter() endpoint.DomainFilter {
 	return p.domainFilter

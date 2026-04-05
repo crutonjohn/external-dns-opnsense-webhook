@@ -111,13 +111,15 @@ func (c *httpClient) doRequest(method, path string, body io.Reader) (*http.Respo
 	return resp, nil
 }
 
-// GetHostOverrides retrieves the list of HostOverrides from the Opnsense Firewall's Unbound API.
-// These are equivalent to A, AAAA, or TXT records
+// GetHostOverrides retrieves all HostOverrides from the Opnsense Firewall's Unbound API.
+// These are equivalent to A, AAAA, or TXT records.
+// We POST with rowCount=-1 to request all records in a single response rather than relying
+// on the default pagination which may return only a subset.
 func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 	resp, err := c.doRequest(
-		http.MethodGet,
+		http.MethodPost,
 		"settings/searchHostOverride",
-		nil,
+		strings.NewReader(`{"current":1,"rowCount":-1,"sort":{},"searchPhrase":""}`),
 	)
 	if err != nil {
 		return nil, err
@@ -129,7 +131,7 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 		return nil, err
 	}
 
-	log.Debugf("gethost: retrieved records: %+v", records.Rows)
+	log.Debugf("gethost: retrieved %d/%d records", len(records.Rows), records.Total)
 
 	if records.Rows == nil {
 		return []DNSRecord{}, nil
@@ -137,33 +139,34 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 	return records.Rows, nil
 }
 
-// CreateHostOverride creates a new DNS A, AAAA, or TXT record in the Opnsense Firewall's Unbound API.
-func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
-	log.Debugf("create: Try pulling pre-existing Unbound %s record: %s", endpoint.RecordType, endpoint.DNSName)
-	lookup, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType)
+// CreateHostOverride creates a DNS A, AAAA, or TXT record in the Opnsense Firewall's Unbound API.
+// Each endpoint is expected to carry exactly one target (see AdjustEndpoints). If a record already
+// exists with the same name, type, and target it is a no-op.
+func (c *httpClient) CreateHostOverride(ep *endpoint.Endpoint) (*DNSRecord, error) {
+	log.Debugf("create: Try pulling pre-existing Unbound %s record: %s", ep.RecordType, ep.DNSName)
+	lookup, err := c.lookupHostOverrideIdentifier(ep.DNSName, ep.RecordType, ep.Targets[0])
 	if err != nil {
 		return nil, err
 	}
 
 	if lookup != nil {
-		log.Debugf("create: Found uuid: %s", lookup.Uuid)
-		log.Debugf("create: Found existing %s record for %s : %s", endpoint.RecordType, endpoint.DNSName, lookup.Uuid)
+		log.Debugf("create: exact %s record for %s → %s already exists, skipping", ep.RecordType, ep.DNSName, ep.Targets[0])
 		return lookup, nil
 	}
 
-	splitHost := SplitUnboundFQDN(endpoint.DNSName)
+	splitHost := SplitUnboundFQDN(ep.DNSName)
 
 	record := DNSRecord{
 		Enabled:  "1",
-		Rr:       endpoint.RecordType,
+		Rr:       ep.RecordType,
 		Hostname: splitHost[0],
 		Domain:   splitHost[1],
 	}
 
-	if endpoint.RecordType == "TXT" {
-		record.TxtData = endpoint.Targets[0]
+	if ep.RecordType == "TXT" {
+		record.TxtData = ep.Targets[0]
 	} else {
-		record.Server = endpoint.Targets[0]
+		record.Server = ep.Targets[0]
 	}
 
 	jsonBody, err := json.Marshal(unboundAddHostOverride{
@@ -184,25 +187,30 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 	}
 	defer resp.Body.Close()
 
-	// TODO: Better error handling if API returns:
-	// {"result":"failed"}
-	//if resp.Body != nil && resp.Body
-
-	var respRecord unboundAddHostOverride
-	if err = json.NewDecoder(resp.Body).Decode(&respRecord); err != nil {
+	var apiResp unboundHostOverrideResponse
+	if err = json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 		return nil, err
 	}
-	log.Debugf("create: created record: %+v", respRecord)
+	if apiResp.Result != "saved" {
+		return nil, fmt.Errorf("create: addHostOverride returned result %q for %s", apiResp.Result, ep.DNSName)
+	}
+	record.Uuid = apiResp.UUID
+	log.Debugf("create: created record %s with uuid %s", ep.DNSName, record.Uuid)
 
-	return nil, nil
+	return &record, nil
 }
 
 // DeleteHostOverride deletes a DNS record from the Opnsense Firewall's Unbound API.
 func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 	log.Debugf("delete: Deleting record %+v", endpoint)
-	lookup, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType)
+	lookup, err := c.lookupHostOverrideIdentifier(endpoint.DNSName, endpoint.RecordType, endpoint.Targets[0])
 	if err != nil {
 		return err
+	}
+
+	if lookup == nil {
+		log.Debugf("delete: no %s record found for %s, skipping", endpoint.RecordType, endpoint.DNSName)
+		return nil
 	}
 
 	log.Debugf("delete: Found match %s", lookup.Uuid)
@@ -221,8 +229,9 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 	return nil
 }
 
-// lookupHostOverrideIdentifier finds a HostOverride in the Opnsense Firewall's Unbound API.
-func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSRecord, error) {
+// lookupHostOverrideIdentifier finds a HostOverride in the Opnsense Firewall's Unbound API
+// that matches the given name, record type, and target value.
+func (c *httpClient) lookupHostOverrideIdentifier(key, recordType, target string) (*DNSRecord, error) {
 	records, err := c.GetHostOverrides()
 	if err != nil {
 		return nil, err
@@ -232,12 +241,22 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSR
 
 	for _, r := range records {
 		log.Debugf("lookup: Checking record: Host=%s, Domain=%s, Type=%s, UUID=%s", r.Hostname, r.Domain, EmbellishUnboundType(r.Rr), r.Uuid)
-		if r.Hostname == splitHost[0] && r.Domain == splitHost[1] && EmbellishUnboundType(r.Rr) == EmbellishUnboundType(recordType) {
-			log.Debugf("lookup: UUID Match Found: %s", r.Uuid)
-			return &r, nil
+		if r.Hostname != splitHost[0] || r.Domain != splitHost[1] || EmbellishUnboundType(r.Rr) != EmbellishUnboundType(recordType) {
+			continue
 		}
+		var recordTarget string
+		if PruneUnboundType(r.Rr) == "TXT" {
+			recordTarget = r.TxtData
+		} else {
+			recordTarget = r.Server
+		}
+		if recordTarget != target {
+			continue
+		}
+		log.Debugf("lookup: UUID Match Found: %s", r.Uuid)
+		return &r, nil
 	}
-	log.Debugf("lookup: No matching record found for Host=%s, Domain=%s, Type=%s", splitHost[0], splitHost[1], EmbellishUnboundType(recordType))
+	log.Debugf("lookup: No matching record found for Host=%s, Domain=%s, Type=%s, Target=%s", splitHost[0], splitHost[1], EmbellishUnboundType(recordType), target)
 	return nil, nil
 }
 
