@@ -137,6 +137,29 @@ func (c *httpClient) GetHostOverrides() ([]DNSRecord, error) {
 	return records.Rows, nil
 }
 
+// GetHostAliases retrieves the list of HostAliases from the Opnsense Firewall's Unbound API.
+// These are equivalent to CNAME records
+func (c *httpClient) GetHostAliases() ([]DNSAlias, error) {
+	resp, err := c.doRequest(
+		http.MethodGet,
+		"settings/searchHostAlias",
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var aliases unboundAliasesList
+	if err = json.NewDecoder(resp.Body).Decode(&aliases); err != nil {
+		return nil, err
+	}
+
+	log.Debugf("getaliases: retrieved aliases: %+v", aliases.Rows)
+
+	return aliases.Rows, nil
+}
+
 // CreateHostOverride creates a new DNS A, AAAA, or TXT record in the Opnsense Firewall's Unbound API.
 func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord, error) {
 	log.Debugf("create: Try pulling pre-existing Unbound %s record: %s", endpoint.RecordType, endpoint.DNSName)
@@ -197,6 +220,63 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 	return nil, nil
 }
 
+// CreateHostAlias creates a new DNS CNAME record in the Opnsense Firewall's Unbound API.
+func (c *httpClient) CreateHostAlias(endpoint *endpoint.Endpoint) (*DNSAlias, error) {
+	log.Debugf("create: Try pulling pre-existing Unbound CNAME record: %s", endpoint.DNSName)
+	lookup, err := c.lookupHostAliasIdentifier(endpoint.DNSName)
+	if err != nil {
+		return nil, err
+	}
+
+	if lookup != nil {
+		log.Debugf("create: Found uuid: %s", lookup.Uuid)
+		log.Debugf("create: Found existing CNAME record for %s : %s", endpoint.DNSName, lookup.Uuid)
+		return lookup, nil
+	}
+
+	// For CNAME, we need to find the target host override first
+	targetHost := endpoint.Targets[0]
+	targetOverride, err := c.lookupHostOverrideIdentifier(targetHost, "A")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find target host override for %s: %w", targetHost, err)
+	}
+	if targetOverride == nil {
+		return nil, fmt.Errorf("target host override not found for %s", targetHost)
+	}
+
+	splitHost := SplitUnboundFQDN(endpoint.DNSName)
+
+	jsonBody, err := json.Marshal(unboundAddHostAlias{
+		Alias: DNSAlias{
+			Enabled:  "1",
+			Host:     targetOverride.Uuid,
+			Hostname:    splitHost[0],
+			Domain:   splitHost[1],
+		}})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debugf("create: POST CNAME: %s", string(jsonBody))
+	resp, err := c.doRequest(
+		http.MethodPost,
+		"settings/addHostAlias",
+		bytes.NewReader(jsonBody),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var alias unboundAddHostAlias
+	if err = json.NewDecoder(resp.Body).Decode(&alias); err != nil {
+		return nil, err
+	}
+	log.Debugf("create: created alias: %+v", alias)
+
+	return nil, nil
+}
+
 // DeleteHostOverride deletes a DNS record from the Opnsense Firewall's Unbound API.
 func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 	log.Debugf("delete: Deleting record %+v", endpoint)
@@ -221,6 +301,33 @@ func (c *httpClient) DeleteHostOverride(endpoint *endpoint.Endpoint) error {
 	return nil
 }
 
+// DeleteHostAlias deletes a DNS CNAME record from the Opnsense Firewall's Unbound API.
+func (c *httpClient) DeleteHostAlias(endpoint *endpoint.Endpoint) error {
+	log.Debugf("delete: Deleting CNAME record %+v", endpoint)
+	lookup, err := c.lookupHostAliasIdentifier(endpoint.DNSName)
+	if err != nil {
+		return err
+	}
+
+	if lookup == nil {
+		log.Debugf("delete: CNAME record not found for %s", endpoint.DNSName)
+		return nil
+	}
+
+	log.Debugf("delete: Found CNAME match %s", lookup.Uuid)
+
+	log.Debugf("delete: Sending POST CNAME %s", lookup.Uuid)
+	if _, err = c.doRequest(
+		http.MethodPost,
+		path.Join("settings/delHostAlias", lookup.Uuid),
+		strings.NewReader(emptyJSONObject),
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // lookupHostOverrideIdentifier finds a HostOverride in the Opnsense Firewall's Unbound API.
 func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSRecord, error) {
 	records, err := c.GetHostOverrides()
@@ -238,6 +345,26 @@ func (c *httpClient) lookupHostOverrideIdentifier(key, recordType string) (*DNSR
 		}
 	}
 	log.Debugf("lookup: No matching record found for Host=%s, Domain=%s, Type=%s", splitHost[0], splitHost[1], EmbellishUnboundType(recordType))
+	return nil, nil
+}
+
+// lookupHostAliasIdentifier finds a HostAlias in the Opnsense Firewall's Unbound API.
+func (c *httpClient) lookupHostAliasIdentifier(key string) (*DNSAlias, error) {
+	aliases, err := c.GetHostAliases()
+	if err != nil {
+		return nil, err
+	}
+	log.Debug("lookup: Splitting FQDN for alias")
+	splitHost := SplitUnboundFQDN(key)
+
+	for _, a := range aliases {
+		log.Debugf("lookup: Checking alias: Alias=%s, Domain=%s, UUID=%s", a.Hostname, a.Domain, a.Uuid)
+		if a.Hostname == splitHost[0] && a.Domain == splitHost[1] {
+			log.Debugf("lookup: Alias UUID Match Found: %s", a.Uuid)
+			return &a, nil
+		}
+	}
+	log.Debugf("lookup: No matching alias found for Alias=%s, Domain=%s", splitHost[0], splitHost[1])
 	return nil, nil
 }
 
