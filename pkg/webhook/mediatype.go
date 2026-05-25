@@ -2,15 +2,16 @@ package webhook
 
 import (
 	"fmt"
-	"strings"
 )
 
 const (
-	mediaTypeFormat        = "application/external.dns.webhook+json;"
-	supportedMediaVersions = "1"
+	mediaTypeFormat = "application/external.dns.webhook+json;"
 )
 
-var mediaTypeVersion1 = mediaTypeVersion("1")
+var (
+	mediaTypeVersion1      = mediaTypeVersion("1")
+	supportedMediaVersions = []string{"1"}
+)
 
 type mediaType string
 
@@ -23,14 +24,14 @@ func (m mediaType) Is(headerValue string) bool {
 }
 
 func checkAndGetMediaTypeHeaderValue(value string) (string, error) {
-	for _, v := range strings.Split(supportedMediaVersions, ",") {
+	for _, v := range supportedMediaVersions {
 		if mediaTypeVersion(v).Is(value) {
 			return v, nil
 		}
 	}
 
 	supportedMediaTypesString := ""
-	for i, v := range strings.Split(supportedMediaVersions, ",") {
+	for i, v := range supportedMediaVersions {
 		sep := ""
 		if i < len(supportedMediaVersions)-1 {
 			sep = ", "
