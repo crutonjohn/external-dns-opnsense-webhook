@@ -3,6 +3,7 @@ package webhook
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
@@ -20,6 +21,8 @@ const (
 	logFieldRequestPath   = "requestPath"
 	logFieldRequestMethod = "requestMethod"
 	logFieldError         = "error"
+
+	mediaType = "application/external.dns.webhook+json;version=1"
 )
 
 // Webhook for external dns provider
@@ -42,52 +45,30 @@ func (p *Webhook) acceptHeaderCheck(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (p *Webhook) headerCheck(isContentType bool, w http.ResponseWriter, r *http.Request) error {
-	var header string
+	header := acceptHeader
 	if isContentType {
-		header = r.Header.Get(contentTypeHeader)
-	} else {
-		header = r.Header.Get(acceptHeader)
+		header = contentTypeHeader
 	}
 
-	if len(header) == 0 {
+	v := r.Header.Get(header)
+
+	if len(v) == 0 {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusNotAcceptable)
 
-		msg := "client must provide "
-		if isContentType {
-			msg += "a content type"
-		} else {
-			msg += "an accept header"
-		}
-		err := fmt.Errorf(msg)
-
-		_, writeErr := fmt.Fprint(w, err.Error())
-		if writeErr != nil {
-			requestLog(r).WithField(logFieldError, writeErr).Fatalf("error writing error message to response writer")
-		}
+		err := fmt.Errorf("client must provide %s header", header)
+		io.WriteString(w, err.Error())
 		return err
 	}
 
-	// as we support only one media type version, we can ignore the returned value
-	if _, err := checkAndGetMediaTypeHeaderValue(header); err != nil {
+	if v != mediaType {
 		w.Header().Set(contentTypeHeader, contentTypePlaintext)
 		w.WriteHeader(http.StatusUnsupportedMediaType)
 
-		msg := "client must provide a valid versioned media type in the "
-		if isContentType {
-			msg += "content type"
-		} else {
-			msg += "accept header"
-		}
-
-		err := fmt.Errorf(msg+": %s", err.Error())
-		_, writeErr := fmt.Fprint(w, err.Error())
-		if writeErr != nil {
-			requestLog(r).WithField(logFieldError, writeErr).Fatalf("error writing error message to response writer")
-		}
+		err := fmt.Errorf("client must provide a valid versioned media type in the %s header", header)
+		io.WriteString(w, err.Error())
 		return err
 	}
-
 	return nil
 }
 
@@ -108,7 +89,7 @@ func (p *Webhook) Records(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestLog(r).Debugf("returning records count: %d", len(records))
-	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
+	w.Header().Set(contentTypeHeader, mediaType)
 	w.Header().Set(varyHeader, contentTypeHeader)
 	err = json.NewEncoder(w).Encode(records)
 	if err != nil {
@@ -183,7 +164,7 @@ func (p *Webhook) AdjustEndpoints(w http.ResponseWriter, r *http.Request) {
 	out, _ := json.Marshal(&pve)
 
 	log.Debugf("return adjust endpoints response, resultEndpointCount: %d", len(pve))
-	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
+	w.Header().Set(contentTypeHeader, mediaType)
 	w.Header().Set(varyHeader, contentTypeHeader)
 	if _, writeError := fmt.Fprint(w, string(out)); writeError != nil {
 		requestLog(r).WithField(logFieldError, writeError).Fatalf("error writing response")
@@ -203,7 +184,7 @@ func (p *Webhook) Negotiate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set(contentTypeHeader, string(mediaTypeVersion1))
+	w.Header().Set(contentTypeHeader, mediaType)
 	if _, writeError := w.Write(b); writeError != nil {
 		requestLog(r).WithField(logFieldError, writeError).Error("error writing response")
 		w.WriteHeader(http.StatusInternalServerError)
