@@ -99,14 +99,19 @@ func (c *httpClient) doRequest(method, reqPath string, body io.Reader) (*http.Re
 	return resp, nil
 }
 
-// getRecords fetches all DNS records via the active plugin.
-func (c *httpClient) getRecords() ([]record, error) {
+// search issues the plugin's search request against the given path.
+func (c *httpClient) search(reqPath string) (*http.Response, error) {
 	var bodyReader io.Reader
 	if s := c.plugin.searchBodyStr(); s != "" {
 		bodyReader = strings.NewReader(s)
 	}
+	return c.doRequest(c.plugin.searchMethod(), reqPath, bodyReader)
+}
 
-	resp, err := c.doRequest(c.plugin.searchMethod(), c.plugin.searchPath(), bodyReader)
+// getPrimaryRecords fetches the records held in the plugin's main record space,
+// excluding any separately-stored CNAME aliases.
+func (c *httpClient) getPrimaryRecords() ([]record, error) {
+	resp, err := c.search(c.plugin.searchPath())
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +125,24 @@ func (c *httpClient) getRecords() ([]record, error) {
 	if records == nil {
 		return []record{}, nil
 	}
+	return records, nil
+}
+
+// getRecords fetches all DNS records via the active plugin, including CNAMEs
+// for plugins that can represent them.
+func (c *httpClient) getRecords() ([]record, error) {
+	records, err := c.getPrimaryRecords()
+	if err != nil {
+		return nil, err
+	}
+
+	if cb, ok := c.plugin.(cnameBackend); ok {
+		cnames, err := cb.listCNAMEs(c, records)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, cnames...)
+	}
 
 	log.Debugf("getRecords: retrieved %d records", len(records))
 	return records, nil
@@ -131,6 +154,10 @@ func (c *httpClient) createRecord(ep *endpoint.Endpoint) error {
 		log.Warnf("createRecord: %s records are not supported by the %s plugin, skipping %s",
 			ep.RecordType, c.Config.Plugin, ep.DNSName)
 		return nil
+	}
+
+	if cb, ok := c.plugin.(cnameBackend); ok && ep.RecordType == "CNAME" {
+		return cb.createCNAME(c, ep)
 	}
 
 	existing, err := c.lookup(ep.DNSName, ep.RecordType)
@@ -167,6 +194,10 @@ func (c *httpClient) deleteRecord(ep *endpoint.Endpoint) error {
 		return nil
 	}
 
+	if cb, ok := c.plugin.(cnameBackend); ok && ep.RecordType == "CNAME" {
+		return cb.deleteCNAME(c, ep)
+	}
+
 	r, err := c.lookup(ep.DNSName, ep.RecordType)
 	if err != nil {
 		return err
@@ -178,17 +209,29 @@ func (c *httpClient) deleteRecord(ep *endpoint.Endpoint) error {
 
 	log.Debugf("deleteRecord: deleting %s record %s (uuid=%s)", ep.RecordType, ep.DNSName, r.uuid)
 
-	resp, err := c.doRequest(
-		http.MethodPost,
-		c.plugin.delPath(r.uuid),
-		strings.NewReader(emptyJSONObject),
-	)
+	resp, err := c.doRequest(http.MethodPost, c.plugin.delPath(r.uuid), strings.NewReader(emptyJSONObject))
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
 	return nil
+}
+
+// resolveCNAMETarget finds the A or AAAA record a CNAME should point at.
+// Both backends require the target to exist before the CNAME can be stored.
+func resolveCNAMETarget(records []record, ep *endpoint.Endpoint) (*record, error) {
+	targetFQDN := strings.TrimSuffix(ep.Targets[0], ".")
+
+	target := findByName(records, targetFQDN, "A")
+	if target == nil {
+		target = findByName(records, targetFQDN, "AAAA")
+	}
+	if target == nil {
+		return nil, fmt.Errorf("cannot create CNAME %s: no A or AAAA record exists for target %s",
+			ep.DNSName, targetFQDN)
+	}
+	return target, nil
 }
 
 // lookup searches the current records for one matching the given FQDN and record type.
@@ -198,16 +241,34 @@ func (c *httpClient) lookup(fqdn, recordType string) (*record, error) {
 		return nil, err
 	}
 
-	hostname, domain := splitFQDN(fqdn)
-	for _, r := range records {
-		if r.hostname == hostname && r.domain == domain && r.recordType == recordType {
-			log.Debugf("lookup: matched uuid=%s for %s (%s)", r.uuid, fqdn, recordType)
-			return &r, nil
-		}
+	if r := findByName(records, fqdn, recordType); r != nil {
+		log.Debugf("lookup: matched uuid=%s for %s (%s)", r.uuid, fqdn, recordType)
+		return r, nil
 	}
 
 	log.Debugf("lookup: no match found for %s (%s)", fqdn, recordType)
 	return nil, nil
+}
+
+// findByName returns the record matching the given FQDN and record type, or nil.
+func findByName(records []record, fqdn, recordType string) *record {
+	hostname, domain := splitFQDN(fqdn)
+	for i, r := range records {
+		if r.hostname == hostname && r.domain == domain && r.recordType == recordType {
+			return &records[i]
+		}
+	}
+	return nil
+}
+
+// findByUUID returns the record with the given UUID, or nil.
+func findByUUID(records []record, uuid string) *record {
+	for i, r := range records {
+		if r.uuid == uuid {
+			return &records[i]
+		}
+	}
+	return nil
 }
 
 // reconfigure triggers a service reload to apply pending changes.

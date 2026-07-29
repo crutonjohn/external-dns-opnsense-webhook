@@ -59,20 +59,38 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 }
 
 // ApplyChanges applies a set of DNS changes to OPNsense.
+//
+// A CNAME alias references its target record, so ordering matters: aliases are
+// deleted before the records they may point at, and created only after those
+// records exist.
 func (p *Provider) ApplyChanges(ctx context.Context, changes *plan.Changes) error {
-	for _, ep := range append(changes.UpdateOld, changes.Delete...) {
+	deleteCNAMEs, deleteRest := partitionCNAMEs(append(changes.UpdateOld, changes.Delete...))
+	for _, ep := range append(deleteCNAMEs, deleteRest...) {
 		if err := p.client.deleteRecord(ep); err != nil {
 			return err
 		}
 	}
 
-	for _, ep := range append(changes.Create, changes.UpdateNew...) {
+	createCNAMEs, createRest := partitionCNAMEs(append(changes.Create, changes.UpdateNew...))
+	for _, ep := range append(createRest, createCNAMEs...) {
 		if err := p.client.createRecord(ep); err != nil {
 			return err
 		}
 	}
 
 	return p.client.reconfigure()
+}
+
+// partitionCNAMEs splits endpoints into CNAME records and everything else.
+func partitionCNAMEs(endpoints []*endpoint.Endpoint) (cnames, rest []*endpoint.Endpoint) {
+	for _, ep := range endpoints {
+		if ep.RecordType == "CNAME" {
+			cnames = append(cnames, ep)
+		} else {
+			rest = append(rest, ep)
+		}
+	}
+	return cnames, rest
 }
 
 // GetDomainFilter returns the domain filter configured for this provider.

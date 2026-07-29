@@ -34,6 +34,32 @@ type pluginBackend interface {
 	supportsType(recordType string) bool
 }
 
+// cnameBackend is an optional extension implemented by plugins that can
+// represent CNAME records.
+//
+// The two OPNsense plugins model CNAMEs too differently to share paths and
+// codecs the way pluginBackend does. Unbound stores them as standalone Host
+// Aliases that reference their target by UUID, so they are created and deleted
+// on their own endpoints. Dnsmasq stores them as a comma-separated list on the
+// target host entry, so managing one is a read-modify-write of that entry.
+// Each plugin therefore implements the operations itself.
+//
+// In both cases a CNAME can only exist alongside its target: the target must
+// already be present as an A or AAAA record.
+type cnameBackend interface {
+	// listCNAMEs returns the CNAME records the plugin is currently storing.
+	// records holds the primary records already fetched by the caller, so
+	// implementations can resolve targets without refetching them.
+	listCNAMEs(c *httpClient, records []record) ([]record, error)
+
+	// createCNAME stores a CNAME. It returns an error if the target does not
+	// resolve to an existing record.
+	createCNAME(c *httpClient, ep *endpoint.Endpoint) error
+
+	// deleteCNAME removes a CNAME. One that is already absent is not an error.
+	deleteCNAME(c *httpClient, ep *endpoint.Endpoint) error
+}
+
 // newPlugin returns the pluginBackend for the given plugin name.
 func newPlugin(name string) (pluginBackend, error) {
 	switch name {

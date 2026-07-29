@@ -15,6 +15,6 @@ type record struct {
 	uuid       string
 	hostname   string
 	domain     string
-	recordType string // "A", "AAAA", or "TXT"
-	target     string // IP address for A/AAAA, text content for TXT
+	recordType string // "A", "AAAA", "TXT", or "CNAME"
+	target     string // IP address for A/AAAA, text content for TXT, FQDN for CNAME
 }
