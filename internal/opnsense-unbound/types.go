@@ -20,6 +20,8 @@ type DNSRecord struct {
 	Mx          string `json:"mx,omitempty"`
 	MxPrio      string `json:"mxprio,omitempty"`
 	TxtData     string `json:"txtdata,omitempty"`
+	// Ttl is empty when the override uses Unbound's default TTL.
+	Ttl string `json:"ttl,omitempty"`
 }
 
 // DNSAlias represents a DNS alias (CNAME) record in the Opnsense Unbound API.
