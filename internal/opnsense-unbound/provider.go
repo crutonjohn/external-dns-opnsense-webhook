@@ -64,6 +64,7 @@ func (p *Provider) Records(ctx context.Context) ([]*endpoint.Endpoint, error) {
 			DNSName:    JoinUnboundFQDN(record.Hostname, record.Domain),
 			RecordType: recordType,
 			Targets:    targets,
+			RecordTTL:  ParseUnboundTTL(record.Ttl),
 		}
 
 		if !p.domainFilter.Match(ep.DNSName) {

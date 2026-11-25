@@ -181,6 +181,7 @@ func (c *httpClient) CreateHostOverride(endpoint *endpoint.Endpoint) (*DNSRecord
 		Rr:       endpoint.RecordType,
 		Hostname: splitHost[0],
 		Domain:   splitHost[1],
+		Ttl:      FormatUnboundTTL(endpoint.RecordTTL),
 	}
 
 	if endpoint.RecordType == "TXT" {
